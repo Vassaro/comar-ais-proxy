@@ -16,6 +16,7 @@ let attemptCount = 0;
 let sourceWS = null;
 const clients = new Set();
 let wssStarted = false;
+let latestVesselInitMessage = null;
 
 // Logging helper
 function log(msg) {
@@ -115,6 +116,11 @@ function handleAISMessage(message) {
           log(`📥 AIS Event: ${eventType}`);
         }
 
+        if (eventType === 'vesselPositions-init') {
+          latestVesselInitMessage = message;
+          log(`📥 Updated vesselPositions-init cache`);
+        }
+        
         if (eventType === 'vesselPositions-update' || eventType === 'vesselPositions-init') {
           for (const client of clients) {
             if (client.readyState === WebSocket.OPEN) {
@@ -122,6 +128,7 @@ function handleAISMessage(message) {
             }
           }
         }
+        
       }
     } catch (err) {
       log(`❌ JSON parse error: ${err.message}`);
@@ -142,6 +149,15 @@ function startLocalProxyServer() {
   wss.on('connection', (client) => {
     log('🔗 Local client connected');
     clients.add(client);
+    if (latestVesselInitMessage) {
+      try {
+        client.send(latestVesselInitMessage);
+        log('📤 Sent cached vesselPositions-init to new client');
+      } catch (err) {
+        log(`⚠️ Failed to send init message to client: ${err.message}`);
+      }
+    }
+
 
     client.on('close', () => {
       clients.delete(client);
